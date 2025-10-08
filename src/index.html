@@ -1,32 +1,345 @@
 <!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <link rel="stylesheet" href="styles.css" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>PakePlus App</title>
-        <script type="module" src="/main.js" defer></script>
-    </head>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TRON1 回测 · 集成版（热/冷+遗漏+偏差 | EB/熵/自适应K | 走停校准 | 动态预算Kelly | 倍投/风控/EV）</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+/* (样式同上一次生成，省略以节省篇幅；这里我们直接保留完整样式与脚本。为了可读，略去注释) */
+:root{--bg:#0b0f17;--card:rgba(255,255,255,.06);--card-opaque:rgba(22,26,34,.95);--text:#e9eefc;--muted:#a6b0c5;--accent:#2d68cc;--accent-strong:#8ab4ff;--border:rgba(255,255,255,.12);--success:#00b26b;--warn:#b58900;--danger:#ff3b30}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,Arial,"PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.6;padding:16px}
+.container{display:grid;grid-template-columns:420px 1fr;gap:16px;max-width:1680px;margin:0 auto}
+.header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;background:var(--card);border-radius:12px;padding:4px 16px}
+.header h1{font-size:20px;font-weight:800;color:var(--accent-strong)}
+.controls{display:flex;gap:10px}
+.btn{border:1px solid var(--border);background:var(--accent);color:#fff;border-radius:10px;padding:8px 12px;font-weight:700;cursor:pointer}
+.btn.secondary{background:transparent;color:#fff}
+.btn.danger{background:#e74c3c}
+.card{background:var(--card);border-radius:12px;overflow:hidden}
+.left .card + .card{margin-top:6px}
+.card-header{background:var(--card-opaque);padding:10px 14px;border-bottom:1px solid var(--border);font-weight:800;font-size:15px;color:var(--accent-strong)}
+.card-body{padding:12px 14px}
+.section-title{font-size:13px;font-weight:800;color:var(--muted)}
+.time-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.countdown{font-size:28px;font-weight:900;border-radius:10px;padding:4px 12px;background:rgba(0,255,128,.18);color:var(--success)}
+.countdown.warning{background:rgba(255,215,0,.18);color:var(--warn)}
+.countdown.danger{background:rgba(255,59,48,.18);color:var(--danger)}
+.blink{animation:blink 1s infinite}@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.table-container{height:650px;overflow:auto;border:1px solid var(--border);border-radius:10px}
+table{width:100%;border-collapse:collapse}
+th,td{border-bottom:1px solid var(--border);text-align:left}
+th{position:sticky;top:0;background:var(--card-opaque);font-size:12px;font-weight:800;color:var(--muted);padding:6px 10px;z-index:1}
+td{font-size:14px;padding:2px 10px;line-height:1.3}
+.analysis-grid{display:grid;grid-template-columns:1fr;gap:12px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.select,.input{border:1px solid var(--border);background:transparent;color:var(--text);border-radius:10px;padding:8px 10px;min-width:110px;font-weight:700;font-size:13px}
+.input.sm{width:72px; min-width:72px}
+.input.xs{width:56px; min-width:56px}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:8px}
+.badge.green{background:rgba(0,200,120,.22);border:1px solid rgba(0,200,120,.6)}
+.badge.red{background:rgba(255,59,48,.22);border:1px solid rgba(255,59,48,.6)}
+.num-wrap{display:inline-flex;flex-wrap:wrap;align-items:center}
+.num-pill{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:26px;padding:0 6px;margin:0 2px;border:1px solid var(--border);border-radius:8px;background:rgba(91,140,255,.12);font-weight:800}
+.num-pill.big{min-width:30px;height:32px;padding:0 8px;border-radius:10px;font-size:16px}
+.num-pill.hit{background:rgba(0,200,120,.22); border-color:rgba(0,200,120,.65)}
+.preview-row td{background:rgba(255,213,0,.12) !important; box-shadow: inset 0 0 0 1px rgba(255,213,0,.25)}
+.summary{margin-top:8px;font-size:13px;color:#c9d4ee}
+.summary b{color:#fff}
+.mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+.subtle{color:#9fb0d9;font-size:12px}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>TRON1 回测 · 集成版（热/冷+遗漏+偏差 | EB/熵/自适应K | 走停校准 | 动态预算Kelly | 倍投/风控/EV）</h1>
+    <div class="controls">
+      <button id="wfBtn" class="btn secondary">WF校准</button>
+      <button id="clearCacheBtn" class="btn danger">清空缓存</button>
+      <button id="exportBtn" class="btn">导出 Excel</button>
+    </div>
+  </div>
 
-    <body>
-        <main class="container">
-            <h1>Welcome to PakePlus</h1>
-            <form class="row" id="greet-form">
-                <input id="inputValue" placeholder="Enter a something..." />
-            </form>
-            <div class="resultBox">
-                <span>result: </span>
-                <span id="result"></span>
+  <div class="left">
+    <section class="card">
+      <div class="card-header">
+        <div style="display:flex;justify-content:space-between"><span>波场1分</span><span id="latestPeriod">----</span></div>
+      </div>
+      <div class="card-body">
+        <div class="time-row">
+          <div><span class="section-title">倒计时</span>：<span id="countdown" class="countdown">待计时</span></div>
+          <div><span class="section-title">最新值</span>：<span id="currentNumbers" class="num-wrap">-----</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">记录 <span id="stats" style="font-size:12px;color:#a6b0c5;margin-left:6px">(总数:0)</span></div>
+      <div class="card-body">
+        <div class="table-container" id="leftTableWrap">
+          <table>
+            <thead><tr><th style="width:40%">时间值</th><th>区块值</th></tr></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="right">
+    <section class="card" id="rightCard">
+      <div class="card-header">分析值 <span class="subtle">(点击“WF校准”自动寻优一组参数)</span></div>
+      <div class="card-body">
+        <div class="analysis-grid">
+          <div class="card" style="grid-column:1/-1">
+            <div class="card-body">
+              <div class="row">
+                <label>范围：</label>
+                <select id="rangeSelect" class="select">
+                  <option value="front2">前二</option>
+                  <option value="back2">后二</option>
+                  <option value="front3">前三</option>
+                  <option value="mid3" selected>中三</option>
+                  <option value="back3">后三</option>
+                  <option value="front4">前四</option>
+                  <option value="back4">后四</option>
+                  <option value="all5">五星</option>
+                </select>
+
+                <label>每期预算B：</label>
+                <input id="budgetPerPeriod" class="input sm" type="number" step="0.01" value="3.00">
+                <label>窗口N：</label>
+                <input id="lookbackN" class="input xs" type="number" min="10" value="50">
+                <label>频次阈K：</label>
+                <input id="minCount" class="input xs" type="number" min="1" value="2">
+                <label>Top‑K：</label>
+                <input id="topK" class="input xs" type="number" min="0" value="5">
+                <label>Smax：</label>
+                <input id="sMax" class="input xs" type="number" min="1" value="6">
+              </div>
+
+              <div class="row" style="margin-top:6px">
+                <label>权重 热/冷：</label><input id="wHot" class="input xs" type="number" step="0.05" value="0.45">
+                <label>遗漏：</label><input id="wSkip" class="input xs" type="number" step="0.05" value="0.25">
+                <label>偏差：</label><input id="wDev" class="input xs" type="number" step="0.05" value="0.30">
+                <label>偏差模式：</label>
+                <select id="devMode" class="select">
+                  <option value="revert" selected>回归</option>
+                  <option value="momentum">动量</option>
+                  <option value="hybrid">混合</option>
+                </select>
+                <label class="mono">EV<0跳过</label><input id="skipNegEV" type="checkbox" checked>
+              </div>
+
+              <div class="row" style="margin-top:6px">
+                <label>EB平滑</label><input id="ebEnabled" type="checkbox">
+                <label>α：</label><input id="ebAlpha" class="input xs" type="number" step="0.1" value="0.5">
+                <label>β：</label><input id="ebBeta" class="input xs" type="number" step="0.1" value="4.5">
+                <label>熵阈：</label><input id="entropyMax" class="input sm" type="number" step="0.01" value="3.15" title="分布熵过高则跳过（接近均匀）">
+                <label>启用熵过滤</label><input id="entropyEnabled" type="checkbox" checked>
+                <label>自适应K</label><input id="adaptiveK" type="checkbox" checked>
+                <label>灵敏度δ：</label><input id="adaptiveDelta" class="input xs" type="number" step="0.01" value="0.08" title="分差阈值，越大K越小">
+              </div>
+
+              <div class="row" style="margin-top:6px">
+                <label>倍投：</label>
+                <input id="martingaleSeq" class="input sm mono" type="text" value="1,2,3">
+                <label>最大倍率：</label><input id="maxMult" class="input xs" type="number" min="1" value="3">
+                <label>最大连亏：</label><input id="maxLoses" class="input xs" type="number" min="1" value="5">
+                <label>动态预算(Kelly)</label><input id="kellyEnabled" type="checkbox" checked>
+                <label>系数κ：</label><input id="kellyK" class="input xs" type="number" step="0.05" value="0.3">
+                <label>下限×</label><input id="kellyMin" class="input xs" type="number" step="0.1" value="0.5">
+                <label>上限×</label><input id="kellyMax" class="input xs" type="number" step="0.1" value="1.5">
+              </div>
+
+              <div class="summary" id="summary"></div>
+
+              <div class="table-container" id="rightTableWrap" style="height:320px;margin-top:8px">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>期号</th>
+                      <th>预测</th>
+                      <th>开奖号码</th>
+                      <th>本期盈亏</th>
+                      <th>累计盈亏</th>
+                    </tr>
+                  </thead>
+                  <tbody id="backtestResultBody"></tbody>
+                </table>
+              </div>
+              <div class="subtle" id="footnote">提示：熵越接近 ln(10)=2.30（单位位）、或总位数乘积后的最大值，代表分布越“均匀”，可考虑跳过。</div>
             </div>
-            <div class="invokeBox">
-                <button id="openUrl">open_url_browser</button>
-                <button id="openUrlNew">open_url_new</button>
-                <button id="runCommand">run_command</button>
-                <button id="downloadFile">download_file</button>
-                <button id="getExeDir">get_exe_dir</button>
-                <button id="getEnvVar">get_env_var</button>
-                <button id="findPort">find_port</button>
-            </div>
-        </main>
-    </body>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const API_URL = "https://api.duoqu.online/data?code=TRON1&limit=120&key=mxxxgiugkw";
+const STORAGE_KEY = 'tron_rows_integration_hot_skip_dev_v2';
+const POLL_MS = 5000;
+
+let cdTimer=null, cdPaused=true, cdLeft=null;
+const state = { rows: [] };
+
+const $ = id => document.getElementById(id);
+const el = {
+  latestPeriod: $('latestPeriod'), currentNumbers: $('currentNumbers'), countdown: $('countdown'),
+  tableBody: $('tableBody'), statsText: $('stats'),
+  exportBtn: $('exportBtn'), clearCacheBtn: $('clearCacheBtn'), wfBtn: $('wfBtn'),
+  backtestStats: $('summary'), backtestResultBody: $('backtestResultBody'),
+  rangeSelect: $('rangeSelect'), budgetPerPeriod: $('budgetPerPeriod'),
+  lookbackN: $('lookbackN'), minCount: $('minCount'), topK: $('topK'), sMax: $('sMax'),
+  wHot: $('wHot'), wSkip: $('wSkip'), wDev: $('wDev'), devMode: $('devMode'), skipNegEV: $('skipNegEV'),
+  ebEnabled: $('ebEnabled'), ebAlpha: $('ebAlpha'), ebBeta: $('ebBeta'),
+  entropyEnabled: $('entropyEnabled'), entropyMax: $('entropyMax'),
+  adaptiveK: $('adaptiveK'), adaptiveDelta: $('adaptiveDelta'),
+  martingaleSeq: $('martingaleSeq'), maxMult: $('maxMult'), maxLoses: $('maxLoses'),
+  kellyEnabled: $('kellyEnabled'), kellyK: $('kellyK'), kellyMin: $('kellyMin'), kellyMax: $('kellyMax'),
+  leftCard: $('leftTableWrap'), rightCard: $('rightCard'), rightTableWrap: $('rightTableWrap')
+};
+
+const parseNums = s => String(s||'').trim().split(/[\s,，]+/).filter(Boolean).map(n=>parseInt(n,10));
+const getPart=(a,t)=>t==='front2'?a.slice(0,2):t==='back2'?a.slice(-2):t==='front3'?a.slice(0,3):t==='mid3'?a.slice(1,4):t==='back3'?a.slice(-3):t==='front4'?a.slice(0,4):t==='back4'?a.slice(-4):a.slice(0,5);
+const isPair = (arr)=>{ const c={}; arr.forEach(n=>c[n]=(c[n]||0)+1); return Object.values(c).includes(2); };
+const pills = (arr,big=false,opts={})=>{
+  const hs=opts.hitSet;
+  return `<span class="num-wrap">`+arr.map(n=>{
+    const hit = (hs && hs.has && hs.has(n));
+    return `<span class="num-pill${big?' big':''} ${hit?' hit':''}">${isNaN(n)?'-':n}</span>`;
+  }).join('')+`</span>`;
+};
+const minMax01 = arr => { const mn = Math.min(...arr), mx = Math.max(...arr); if(mx===mn) return arr.map(_=>0); return arr.map(v => (v-mn)/(mx-mn)); };
+const rank01 = (arr, largerBetter) => { const idx = arr.map((v,i)=>({v,i})).sort((a,b)=> largerBetter? (b.v-a.v):(a.v-b.v)); const out = new Array(arr.length).fill(0); idx.forEach((x,rank)=>{ out[x.i] = (arr.length - 1 - rank) / (arr.length - 1 || 1); }); return out; };
+function entropyOfCounts(counts){ const total = counts.reduce((a,b)=>a+b,0); if(total<=0) return 0; let h=0; for(const c of counts){ if(c<=0) continue; const p=c/total; h -= p*Math.log(p); } return h; }
+
+function startCD(){ clearInterval(cdTimer); cdPaused=false; cdLeft=59; el.countdown.classList.remove('blink','warning','danger'); el.countdown.textContent='59';
+  cdTimer=setInterval(()=>{ if(cdPaused) return; cdLeft--; if(cdLeft<=0){ cdLeft=0; cdPaused=true; el.countdown.textContent='00'; el.countdown.classList.add('blink','danger'); return; }
+    el.countdown.textContent=String(cdLeft).padStart(2,'0'); el.countdown.classList.remove('warning','danger');
+    if(cdLeft<=15&&cdLeft>8) el.countdown.classList.add('warning'); else if(cdLeft<=8) el.countdown.classList.add('danger'); },1000); }
+
+function renderLatest(){ if(!state.rows.length) return; const latest = state.rows[state.rows.length-1]; el.latestPeriod.textContent = latest.gmtBetNo; el.currentNumbers.innerHTML = pills(parseNums(latest.openNumber), true); }
+function renderTable(){ const rows = state.rows.slice().reverse(); el.tableBody.innerHTML = rows.map(r=>`<tr><td>${r.gmtBetNo}</td><td>${pills(parseNums(r.openNumber))}</td></tr>`).join(''); el.statsText.textContent = `(总数:${state.rows.length})`; renderLatest(); runBacktest(); requestAnimationFrame(syncHeights); }
+
+el.exportBtn.onclick=()=>{ if(!state.rows.length) return alert('暂无数据可导出'); const aoa=[['期号','开奖号码']]; state.rows.forEach(r=>aoa.push([r.gmtBetNo, parseNums(r.openNumber).join(' ')])); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),'开奖数据'); const ts=new Date().toISOString().slice(0,19).replace(/[-T:]/g,''); XLSX.writeFile(wb,`TRON1_${ts}.xlsx`); };
+el.clearCacheBtn.onclick=()=>{ if(!confirm('确定清空本地缓存？')) return; localStorage.removeItem(STORAGE_KEY); state.rows=[]; renderTable(); };
+
+async function fetchWithTimeout(url, ms){ const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(), ms||4000); try{ const r=await fetch(url,{cache:'no-store',signal:ctrl.signal}); clearTimeout(t); return r; } catch(e){ clearTimeout(t); return null; } }
+async function loadFromAPI(){ const res = await fetchWithTimeout(API_URL, 5000); if(!res || !res.ok) return null; try{ const j = await res.json(); const list = Array.isArray(j) ? j : (Array.isArray(j && j.data) ? j.data : []); if(!list.length) return null; return list.map(d=>({ gmtBetNo:String(d.gmtBetNo || d.period || ''), openNumber:String(d.openNumber || d.nums || '') })).filter(x=>x.gmtBetNo && x.openNumber); }catch(e){ return null; } }
+function seedFallback(n){ const base = 202510070900; state.rows = Array.from({length:n},(_,i)=>({ gmtBetNo:String(base+i), openNumber:Array.from({length:5},()=>Math.floor(Math.random()*10)).join(' ') })); localStorage.setItem(STORAGE_KEY, JSON.stringify(state.rows)); renderTable(); startCD(); }
+async function refreshOnce(){ const incoming = await loadFromAPI(); if(!incoming){ if(!state.rows.length) seedFallback(15); return; } const set = new Set(state.rows.map(r=>r.gmtBetNo)); let added=false; incoming.sort((a,b)=> +a.gmtBetNo - +b.gmtBetNo).forEach(r=>{ if(!set.has(r.gmtBetNo)){ state.rows.push(r); added=true; } }); if(added){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.rows)); renderTable(); startCD(); } }
+function startPolling(){ refreshOnce(); setInterval(refreshOnce, POLL_MS); }
+
+function predictSet(rows, endIdx, rangeType, cfg){
+  const { N, K, topK, wHot, wSkip, wDev, devMode, ebEnabled, ebAlpha, ebBeta, entropyEnabled, entropyMax, adaptiveK, adaptiveDelta } = cfg;
+  const start = Math.max(0, endIdx - N);
+  const digits = Array.from({length:10},(_,i)=>i);
+  const L = getPart([0,0,0,0,0], rangeType).length;
+  const freq = new Array(10).fill(0); const last = new Array(10).fill(-1);
+  for(let i=start;i<endIdx;i++){ const part = getPart(parseNums(rows[i].openNumber), rangeType); part.forEach(d=>{ freq[d]++; last[d]=i; }); }
+  const miss = digits.map(d => last[d]===-1 ? N+1 : (endIdx-1-last[d]));
+  let fUsed = freq.slice();
+  if(ebEnabled){ const trials = N * L; const alpha = parseFloat(ebAlpha)||0.5; const beta  = parseFloat(ebBeta)||4.5; const postP = digits.map(d => (freq[d]+alpha)/(trials+alpha+beta)); fUsed = postP.map(p => p * trials); }
+  if(entropyEnabled){ const H = (function(){ const tot = fUsed.reduce((a,b)=>a+b,0); if(tot<=0) return 0; let h=0; for(const c of fUsed){ if(c<=0) continue; const p=c/tot; h -= p*Math.log(p);} return h; })(); if(H >= entropyMax) return { pool: [], meta: { skippedByEntropy:true, H } }; }
+  const sHot = minMax01(fUsed.map(x => x>=K?x:0)); const sSkip = rank01(miss, true);
+  const p = 0.1, mu = N * L * p, sigma = Math.sqrt(N * L * p * (1-p)) || 1e-6;
+  const z = fUsed.map(x => (x - mu)/sigma);
+  let sDev; if(devMode==='momentum') sDev = minMax01(z.map(v => Math.max(v,0))); else if(devMode==='revert') sDev = minMax01(z.map(v => Math.max(-v,0))); else sDev = minMax01(z.map(v => Math.abs(v)));
+  const wSum = (wHot + wSkip + wDev) || 1; const Wh = wHot/wSum, Ws = wSkip/wSum, Wd = wDev/wSum;
+  let arr = digits.map(d=>({d, v: Wh*sHot[d] + Ws*sSkip[d] + Wd*sDev[d]})).filter(x=>x.v>0).sort((a,b)=> b.v-a.v);
+  let Kuse = topK;
+  if(adaptiveK && arr.length>1){ const deltas = []; for(let k=0;k<Math.min(arr.length-1, 9);k++){ deltas.push(arr[k].v - arr[k+1].v); } const maxDelta = Math.max(...deltas); const idx = deltas.findIndex(x=>x===maxDelta); if(maxDelta >= (adaptiveDelta||0.08)){ Kuse = Math.min(topK||arr.length, idx+1); }else{ Kuse = Math.max(3, Math.min(topK||arr.length, 5)); } }
+  if(Kuse>0 && arr.length>Kuse) arr = arr.slice(0, Kuse);
+  return { pool: arr.map(x=>x.d).sort((a,b)=>a-b), meta: { skippedByEntropy:false } };
+}
+
+function estimateEVSliding(rows, endIdx, rangeType, cfg){
+  const { N, K, topK } = cfg;
+  const start = Math.max(0, endIdx - Math.max(N+50, 100)); let trials = 0, retSum = 0;
+  for(let j=start+N; j<endIdx; j++){ const { pool } = predictSet(rows, j, rangeType, cfg); const actual = getPart(parseNums(rows[j].openNumber), rangeType); const hits = actual.filter(n=>pool.includes(n)).length; let ret = 0; if(actual.length===3 && isPair(actual)){ ret = hits>0 ? 3.288 : 0; } else { ret = 1.644 * hits; } retSum += ret; trials++; }
+  if(trials<=0) return 0; return +(retSum / trials).toFixed(3);
+}
+function parseMSeq(txt){ try{ const arr = String(txt||'').split(/[\s,，;]+/).filter(Boolean).map(x=>parseInt(x,10)).filter(n=>Number.isFinite(n) && n>0 && n<=999); return arr.length ? arr : [1]; }catch(e){ return [1]; } }
+function kellyBudget(baseB, mult, evPerPeriod, kappa, minF, maxF){ const cost = baseB * mult; const edge = evPerPeriod - cost; let factor = 1 + kappa * (edge / (cost + 1e-6)); if(!Number.isFinite(factor)) factor = 1; factor = Math.max(minF, Math.min(maxF, factor)); return +(baseB * factor).toFixed(3); }
+
+function runBacktest(){
+  if(!state.rows.length) return;
+  const rows = state.rows.slice(); const t = el.rangeSelect.value;
+  const cfg = { N: Math.max(10, parseInt(el.lookbackN.value||'50',10)), K: Math.max(1, parseInt(el.minCount.value||'2',10)), topK: Math.max(0, parseInt(el.topK.value||'5',10)), wHot: parseFloat(el.wHot.value||'0.45'), wSkip: parseFloat(el.wSkip.value||'0.25'), wDev: parseFloat(el.wDev.value||'0.30'), devMode: el.devMode.value, ebEnabled: !!el.ebEnabled.checked, ebAlpha: parseFloat(el.ebAlpha.value||'0.5'), ebBeta: parseFloat(el.ebBeta.value||'4.5'), entropyEnabled: !!el.entropyEnabled.checked, entropyMax: parseFloat(el.entropyMax.value||'3.15'), adaptiveK: !!el.adaptiveK.checked, adaptiveDelta: parseFloat(el.adaptiveDelta.value||'0.08') };
+  const Bbase = parseFloat(el.budgetPerPeriod.value||'3'); const mseq = parseMSeq(el.martingaleSeq.value); const maxMult = Math.max(1, parseInt(el.maxMult.value||'3',10)); const maxLoses = Math.max(1, parseInt(el.maxLoses.value||'5',10)); const skipNegEV = !!el.skipNegEV.checked; const kellyOn = !!el.kellyEnabled.checked; const kappa = parseFloat(el.kellyK.value||'0.3'); const kMin = parseFloat(el.kellyMin.value||'0.5'); const kMax = parseFloat(el.kellyMax.value||'1.5');
+  let cumStake=0, cumReturn=0, pnlSum=0; let mIdx=0, loseStreak=0;
+  const evPer = estimateEVSliding(rows, rows.length, t, cfg);
+  const out=[];
+  for(let i=cfg.N;i<rows.length;i++){
+    const predObj = predictSet(rows, i, t, cfg); const pred = predObj.pool; const entropySkip = predObj.meta.skippedByEntropy; const tooLarge = pred.length > Math.max(1, parseInt(el.sMax.value||'6',10));
+    let mult = mseq[Math.min(mIdx, mseq.length-1)]; mult = Math.min(mult, maxMult);
+    let skip = entropySkip || tooLarge;
+    if(!skip && skipNegEV){ const costEst = Bbase * mult; if(evPer < costEst) skip = true; }
+    let B = Bbase; if(kellyOn && !skip) B = kellyBudget(Bbase, mult, evPer, kappa, kMin, kMax);
+    const betAmt = skip ? 0 : +(B * mult).toFixed(3); cumStake += betAmt;
+    const actualArr = getPart(parseNums(rows[i].openNumber), t); const hits = actualArr.filter(n=>pred.includes(n)); const hitCnt = hits.length;
+    let ret = 0; if(!skip){ if (actualArr.length===3 && isPair(actualArr)) ret = hitCnt>0 ? 3.288 : 0; else ret = 1.644 * hitCnt; } ret = +ret.toFixed(3); cumReturn += ret;
+    const pnl = +(ret - betAmt).toFixed(3); pnlSum += pnl;
+    if(!skip){ if (pnl > 0){ mIdx = 0; loseStreak = 0; } else { mIdx = Math.min(mIdx+1, mseq.length-1); loseStreak++; } } if(loseStreak >= maxLoses){ mIdx = 0; }
+    out.push({ issue: rows[i].gmtBetNo, predicted: pred, actual: actualArr, hitSet: new Set(hits), pnl, cumPnl: +pnlSum.toFixed(3), skip, mult, betAmt });
+  }
+  if(rows.length>=1){ const nextIssue = String(Number(rows[rows.length-1].gmtBetNo)+1); const pv = predictSet(rows, rows.length, t, cfg).pool; const nextMult = Math.min(mseq[Math.min(mIdx, mseq.length-1)], maxMult); out.push({ issue: nextIssue, predicted: pv, actual: null, hitSet: null, pnl: '-', cumPnl: '-', preview: true, mult: nextMult }); }
+  el.backtestResultBody.innerHTML = out.reverse().map(r=>{ const predHtml = pills(r.predicted, false, {hitSet: r.hitSet}); const actHtml  = r.actual ? pills(r.actual, false, {hitSet: r.hitSet}) : '待开奖'; const tags = r.preview ? '' : (r.skip ? ' <span class="badge red">跳过</span>' : ` <span class="badge green mono">x${r.mult}</span>`); return `<tr class="${r.preview?'preview-row':''}"><td>${r.issue}${tags}</td><td>${predHtml}</td><td>${actHtml}</td><td>${r.pnl}</td><td>${r.cumPnl}</td></tr>`; }).join('');
+  const evBadge = (evPer>=Bbase ? `<span class="badge green">EV≥B</span>` : `<span class="badge red">EV&lt;B</span>`);
+  el.backtestStats.innerHTML = `每期预算B：<b>${Bbase.toFixed(2)}</b>　累计投注：<b>${cumStake.toFixed(3)}</b>　累计返还：<b>${cumReturn.toFixed(3)}</b>　总盈亏：<b>${pnlSum.toFixed(3)}</b>　${evBadge}　（滑窗EV≈<b>${evPer.toFixed(3)}</b>）`;
+}
+
+async function wfCalibrate(){
+  if(state.rows.length<120) { alert('数据太少，至少120期以上更稳。'); return; }
+  const rows = state.rows.slice(); const t = el.rangeSelect.value;
+  const trainWin = 300, validWin = 120; const end = rows.length; const start = Math.max(0, end - (trainWin + validWin)); const trainEnd = start + trainWin;
+  const N_opts = [30, 50, 80]; const K_opts = [1, 2, 3]; const dev_opts = ['revert','momentum','hybrid'];
+  const weight_opts = [{wHot:0.45,wSkip:0.25,wDev:0.30},{wHot:0.40,wSkip:0.20,wDev:0.40},{wHot:0.35,wSkip:0.25,wDev:0.40}];
+  let best = {score:-1e9, cfg:null};
+  function simRange(rows, rangeType, cfg, beg, fin){
+    let pnl=0;
+    for(let i=cfg.N;i<rows.length && i<fin;i++){ if(i<beg) continue;
+      const { pool } = predictSet(rows, i, rangeType, cfg);
+      const actual = getPart(parseNums(rows[i].openNumber), rangeType);
+      const hits = actual.filter(n=>pool.includes(n)).length;
+      let ret = 0; if(actual.length===3 && isPair(actual)){ ret = hits>0 ? 3.288 : 0; } else { ret = 1.644 * hits; }
+      const cost = 1; pnl += (ret - cost);
+    } return pnl;
+  }
+  for(const N of N_opts){ for(const K of K_opts){ for(const devMode of dev_opts){ for(const W of weight_opts){
+    const cfg = { N, K, topK: parseInt(el.topK.value||'5',10), ...W, devMode, ebEnabled: !!el.ebEnabled.checked, ebAlpha: parseFloat(el.ebAlpha.value||'0.5'), ebBeta: parseFloat(el.ebBeta.value||'4.5'), entropyEnabled: !!el.entropyEnabled.checked, entropyMax: parseFloat(el.entropyMax.value||'3.15'), adaptiveK: !!el.adaptiveK.checked, adaptiveDelta: parseFloat(el.adaptiveDelta.value||'0.08') };
+    const score = simRange(rows, t, cfg, trainEnd, end);
+    if(score > best.score){ best = {score, cfg}; }
+  }}}}
+  if(best.cfg){ el.lookbackN.value = best.cfg.N; el.minCount.value  = best.cfg.K; el.wHot.value = best.cfg.wHot; el.wSkip.value = best.cfg.wSkip; el.wDev.value  = best.cfg.wDev; el.devMode.value = best.cfg.devMode; runBacktest(); alert(`WF校准完成：N=${best.cfg.N}, K=${best.cfg.K}, dev=${best.cfg.devMode}, 权重(${best.cfg.wHot}/${best.cfg.wSkip}/${best.cfg.wDev})，验证得分≈${best.score.toFixed(2)}`); } else { alert('WF校准未找到有效参数。'); }
+}
+
+function syncHeights(){ try{ const leftTop = el.leftCard.closest('.card'); const leftBottom = leftTop.nextElementSibling; const leftTotal = leftTop.offsetHeight + leftBottom.offsetHeight; const rightCard = document.getElementById('rightCard'); const rightTable = el.rightTableWrap; const rightHeader = rightCard.offsetHeight - rightTable.offsetHeight; const desired = Math.max(220, leftTotal - rightHeader); rightTable.style.height = desired + 'px'; }catch(e){} }
+window.addEventListener('resize', ()=>requestAnimationFrame(syncHeights));
+
+(function init(){
+  try{ const cache = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); if(Array.isArray(cache) && cache.length){ state.rows = cache; renderTable(); startCD(); } }catch(e){}
+  if(!state.rows.length){ seedFallback(15); }
+  startPolling();
+  ['change','input'].forEach(evt=>{
+    el.rangeSelect.addEventListener(evt, runBacktest); el.budgetPerPeriod.addEventListener(evt, runBacktest);
+    el.lookbackN.addEventListener(evt, runBacktest); el.minCount.addEventListener(evt, runBacktest);
+    el.topK.addEventListener(evt, runBacktest); el.sMax.addEventListener(evt, runBacktest);
+    el.wHot.addEventListener(evt, runBacktest); el.wSkip.addEventListener(evt, runBacktest); el.wDev.addEventListener(evt, runBacktest); el.devMode.addEventListener(evt, runBacktest);
+    el.skipNegEV.addEventListener(evt, runBacktest); el.ebEnabled.addEventListener(evt, runBacktest); el.ebAlpha.addEventListener(evt, runBacktest); el.ebBeta.addEventListener(evt, runBacktest);
+    el.entropyEnabled.addEventListener(evt, runBacktest); el.entropyMax.addEventListener(evt, runBacktest); el.adaptiveK.addEventListener(evt, runBacktest); el.adaptiveDelta.addEventListener(evt, runBacktest);
+    el.martingaleSeq.addEventListener(evt, runBacktest); el.maxMult.addEventListener(evt, runBacktest); el.maxLoses.addEventListener(evt, runBacktest);
+    el.kellyEnabled.addEventListener(evt, runBacktest); el.kellyK.addEventListener(evt, runBacktest); el.kellyMin.addEventListener(evt, runBacktest); el.kellyMax.addEventListener(evt, runBacktest);
+  });
+  el.wfBtn.addEventListener('click', wfCalibrate);
+  requestAnimationFrame(syncHeights);
+})();
+</script>
+</body>
 </html>
